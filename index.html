@@ -9,21 +9,52 @@
 <style>
   body { font: 16px/1.6 system-ui, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 16px; }
   code { word-break: break-all; }
-  a { margin-right: 1rem; }
+  a { display: inline-block; margin: 0 1rem .5rem 0; }
+  label { font-size: .9rem; }
 </style>
 <p id="msg">開いています…</p>
 <p><code id="path"></code></p>
-<p><a id="obsidian">Obsidian で開く</a><a id="github">GitHub で開く</a></p>
+<p><a id="pull">pull して Obsidian で開く</a><a id="obsidian">Obsidian で開く</a><a id="github">GitHub で開く</a></p>
+<p id="autoclose-row" hidden>
+  <label><input type="checkbox" id="autoclose"> このブラウザでは、開いたあとタブを自動で閉じる</label><br>
+  <small>「Obsidian を開きますか？」で「常に許可」にしてからチェックする。確認が出ている間にタブが閉じると開けなくなるため</small>
+</p>
 <script>
   const VAULT = "context";
   const GITHUB = "https://github.com/ShunichiYoshioka211/personal-context/blob/main/context/";
-  // スマホの Obsidian に vault を入れたら false にする
-  const MOBILE_TO_GITHUB = true;
+  // スマホは pull してから開く（Obsidian の pull-then-open プラグインが受ける）。
+  // PC は Claude が同じ端末でノートを書くので pull しない
+  const MOBILE_PULL = true;
+  const DESKTOP_PULL = false;
+  const AUTO_CLOSE_KEY = "autoClose";
+
+  const mobile = /Android|iPhone|iPad/.test(navigator.userAgent);
+  const $ = (id) => document.getElementById(id);
+
+  function load(key) {
+    try { return localStorage.getItem(key); } catch (e) { return null; }
+  }
+  function save(key, value) {
+    try { localStorage.setItem(key, value); } catch (e) {}
+  }
+
+  // 開けたらタブを閉じる。外部アプリから開かれた履歴1件のタブなら window.close() が効く
+  let closing = false;
+  function closeTab() {
+    if (closing) return;
+    closing = true;
+    window.close();
+    $("msg").textContent = "このタブは閉じて構いません";
+  }
+  // 見えなくなった ＝ Obsidian が前に出た。確認ダイアログでは隠れないので常に閉じてよい
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") closeTab();
+  });
 
   // 使い方: https://…/obsidian-open/#50-reference/foo
   // `#` の後ろは vault からの相対パス（`.md` は省略可）。`#` 以降はサーバーに送られない
   function go() {
-    const msg = document.getElementById("msg");
+    const msg = $("msg");
     let path;
     try {
       path = decodeURIComponent(location.hash.slice(1)).replace(/\.md$/, "");
@@ -42,14 +73,29 @@
       return;
     }
     const hasExt = /\.[A-Za-z0-9]+$/.test(path);
-    const obsidian = "obsidian://open?vault=" + VAULT + "&file=" + encodeURIComponent(path);
-    const github = GITHUB + path + (hasExt ? "" : ".md");
-    document.getElementById("path").textContent = path;
-    document.getElementById("obsidian").href = obsidian;
-    document.getElementById("github").href = github;
+    const query = "?vault=" + VAULT + "&file=" + encodeURIComponent(path);
+    const urls = {
+      pull: "obsidian://pull-open" + query,
+      obsidian: "obsidian://open" + query,
+      github: GITHUB + path + (hasExt ? "" : ".md"),
+    };
+    $("path").textContent = path;
+    for (const id in urls) $(id).href = urls[id];
     msg.textContent = "開いています…（開かなければ下のボタンを押す）";
-    const mobile = /Android|iPhone|iPad/.test(navigator.userAgent);
-    location.replace(mobile && MOBILE_TO_GITHUB ? github : obsidian);
+
+    location.replace((mobile ? MOBILE_PULL : DESKTOP_PULL) ? urls.pull : urls.obsidian);
+
+    // PC では Obsidian が前に出てもブラウザが隠れきらないことがあるので、
+    // チェックを入れたブラウザに限り、フォーカスが外れたら（遅くとも1.5秒で）閉じる
+    if (!mobile) {
+      $("autoclose-row").hidden = false;
+      $("autoclose").checked = load(AUTO_CLOSE_KEY) === "1";
+      $("autoclose").onchange = (e) => save(AUTO_CLOSE_KEY, e.target.checked ? "1" : "0");
+      if (load(AUTO_CLOSE_KEY) === "1") {
+        addEventListener("blur", closeTab);
+        setTimeout(closeTab, 1500);
+      }
+    }
   }
   addEventListener("hashchange", go);
   go();
