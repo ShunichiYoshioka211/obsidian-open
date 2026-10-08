@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light dark">
+<title>Open note</title>
+<style>
+  body { font: 16px/1.6 system-ui, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 16px; }
+  code { word-break: break-all; }
+  a { margin-right: 1rem; }
+</style>
+<p id="msg">開いています…</p>
+<p><code id="path"></code></p>
+<p><a id="obsidian">Obsidian で開く</a><a id="github">GitHub で開く</a></p>
+<script>
+  const VAULT = "context";
+  const GITHUB = "https://github.com/ShunichiYoshioka211/personal-context/blob/main/context/";
+  // スマホの Obsidian に vault を入れたら false にする
+  const MOBILE_TO_GITHUB = true;
+
+  // 使い方: https://…/obsidian-open/#50-reference/foo
+  // `#` の後ろは vault からの相対パス（`.md` は省略可）。`#` 以降はサーバーに送られない
+  function go() {
+    const msg = document.getElementById("msg");
+    let path;
+    try {
+      path = decodeURIComponent(location.hash.slice(1)).replace(/\.md$/, "");
+    } catch (e) {
+      msg.textContent = "パスを読めません: " + location.hash;
+      return;
+    }
+    if (!path) {
+      msg.textContent = "URL の # の後ろにノートのパスを付けてください（例: #50-reference/foo）";
+      return;
+    }
+    // ファイル名は ASCII の kebab-case だけ。`..` やスキームを含むものは通さない。
+    // 拡張子は .md 以外（.base など）のときだけ残る
+    if (!/^[A-Za-z0-9_\-]+(\/[A-Za-z0-9_\-]+)*(\.[A-Za-z0-9]+)?$/.test(path)) {
+      msg.textContent = "パスが不正です: " + path;
+      return;
+    }
+    const hasExt = /\.[A-Za-z0-9]+$/.test(path);
+    const obsidian = "obsidian://open?vault=" + VAULT + "&file=" + encodeURIComponent(path);
+    const github = GITHUB + path + (hasExt ? "" : ".md");
+    document.getElementById("path").textContent = path;
+    document.getElementById("obsidian").href = obsidian;
+    document.getElementById("github").href = github;
+    msg.textContent = "開いています…（開かなければ下のボタンを押す）";
+    const mobile = /Android|iPhone|iPad/.test(navigator.userAgent);
+    location.replace(mobile && MOBILE_TO_GITHUB ? github : obsidian);
+  }
+  addEventListener("hashchange", go);
+  go();
+</script>
